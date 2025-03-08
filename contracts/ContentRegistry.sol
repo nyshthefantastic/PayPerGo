@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-
-contract ContentRegistry is ReentrancyGuard {
+contract ContentRegistry {
     struct Content {
         uint256 contentId;
         address creatorWalletAddress;
         uint256 ratePerUnit;
         uint256 maxUnits;
+        string contentData; // Store the article content on-chain
     }
 
     // Mapping: contentId → Content details
     mapping(uint256 => Content) public contents;
+
+    // Array to store all content IDs
+    uint256[] private contentIds;
 
     // Mapping: userAddress → escrow balance
     mapping(address => uint256) public escrowBalances;
@@ -23,7 +25,7 @@ contract ContentRegistry is ReentrancyGuard {
     // Mapping: creatorWalletAddress → earnings
     mapping(address => uint256) public creatorEarnings;
 
-    event ContentRegistered(uint256 indexed contentId, address indexed creator, uint256 ratePerUnit, uint256 maxUnits);
+    event ContentRegistered(uint256 indexed contentId, address indexed creator, uint256 ratePerUnit, uint256 maxUnits, string contentData);
     event EscrowDeposited(address indexed user, uint256 paymentValue);
     event EscrowWithdrawn(address indexed user, uint256 amount);
     event ContentAccessed(uint256 indexed contentId, address indexed user, uint256 unitsPurchased, uint256 totalCost, uint256 totalUnitsConsumed);
@@ -38,7 +40,8 @@ contract ContentRegistry is ReentrancyGuard {
     function registerContent(
         uint256 _contentId,
         uint256 _ratePerUnit,
-        uint256 _maxUnits
+        uint256 _maxUnits,
+        string calldata _contentData
     ) external {
         require(contents[_contentId].creatorWalletAddress == address(0), "Content already registered");
         require(_ratePerUnit > 0, "Rate must be > 0");
@@ -47,10 +50,24 @@ contract ContentRegistry is ReentrancyGuard {
             contentId: _contentId,
             creatorWalletAddress: msg.sender,
             ratePerUnit: _ratePerUnit,
-            maxUnits: _maxUnits
+            maxUnits: _maxUnits,
+            contentData: _contentData
         });
 
-        emit ContentRegistered(_contentId, msg.sender, _ratePerUnit, _maxUnits);
+        contentIds.push(_contentId); // Store the contentId in the array
+
+        emit ContentRegistered(_contentId, msg.sender, _ratePerUnit, _maxUnits, _contentData);
+    }
+
+    /// @notice Returns all registered content IDs
+    function getAllContentIds() external view returns (uint256[] memory) {
+        return contentIds;
+    }
+
+    /// @notice Returns the content data for a given content ID
+    function getContentData(uint256 _contentId) external view returns (string memory) {
+        require(contents[_contentId].creatorWalletAddress != address(0), "Content not found");
+        return contents[_contentId].contentData;
     }
 
     /// @notice Deposit funds into escrow for later consumption
@@ -61,7 +78,7 @@ contract ContentRegistry is ReentrancyGuard {
     }
 
     /// @notice Withdraw unused escrow funds
-    function withdrawEscrow() external nonReentrant {
+    function withdrawEscrow() external {
         uint256 balance = escrowBalances[msg.sender];
         require(balance > 0, "No funds to withdraw");
 
@@ -73,7 +90,7 @@ contract ContentRegistry is ReentrancyGuard {
 
     /// @notice Pay-per-use to access content. This will update usage
     ///         and store earnings for the creator.
-    function accessContent(uint256 _contentId, uint256 _unitsToBuy) external nonReentrant {
+    function accessContent(uint256 _contentId, uint256 _unitsToBuy) external {
         Content storage content = contents[_contentId];
         require(content.creatorWalletAddress != address(0), "Content not found");
         require(_unitsToBuy > 0, "Must buy at least 1 unit");
@@ -86,9 +103,7 @@ contract ContentRegistry is ReentrancyGuard {
             "Exceeds max usage limit"
         );
 
-        uint256 totalCost;
-        unchecked { totalCost = content.ratePerUnit * _unitsToBuy; } // Gas optimization
-
+        uint256 totalCost = content.ratePerUnit * _unitsToBuy;
         require(escrowBalances[msg.sender] >= totalCost, "Insufficient escrow balance");
 
         // Deduct escrow & track usage
@@ -108,7 +123,7 @@ contract ContentRegistry is ReentrancyGuard {
     }
 
     /// @notice Allows creators to withdraw their earnings from escrow
-    function withdrawEarnings(uint256 _contentId) external nonReentrant onlyCreator(_contentId) {
+    function withdrawEarnings(uint256 _contentId) external onlyCreator(_contentId) {
         uint256 earnings = creatorEarnings[msg.sender];
         require(earnings > 0, "No earnings to withdraw");
 
