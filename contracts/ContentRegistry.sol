@@ -7,7 +7,9 @@ contract ContentRegistry {
         address creatorWalletAddress;
         uint256 ratePerUnit;
         uint256 maxUnits;
-        string contentData; // Store the article content on-chain
+        string title;
+        string contentData;
+        uint256 timestamp;
     }
 
     // Mapping: contentId → Content details
@@ -25,10 +27,24 @@ contract ContentRegistry {
     // Mapping: creatorWalletAddress → earnings
     mapping(address => uint256) public creatorEarnings;
 
-    event ContentRegistered(uint256 indexed contentId, address indexed creator, uint256 ratePerUnit, uint256 maxUnits, string contentData);
+    event ContentRegistered(
+        uint256 indexed contentId,
+        address indexed creator,
+        uint256 ratePerUnit,
+        uint256 maxUnits,
+        string title,
+        string contentData,
+        uint256 timestamp
+    );
     event EscrowDeposited(address indexed user, uint256 paymentValue);
     event EscrowWithdrawn(address indexed user, uint256 amount);
-    event ContentAccessed(uint256 indexed contentId, address indexed user, uint256 unitsPurchased, uint256 totalCost, uint256 totalUnitsConsumed);
+    event ContentAccessed(
+        uint256 indexed contentId,
+        address indexed user,
+        uint256 unitsPurchased,
+        uint256 totalCost,
+        uint256 totalUnitsConsumed
+    );
     event EarningsWithdrawn(address indexed creator, uint256 amount);
 
     modifier onlyCreator(uint256 _contentId) {
@@ -41,6 +57,7 @@ contract ContentRegistry {
         uint256 _contentId,
         uint256 _ratePerUnit,
         uint256 _maxUnits,
+        string calldata _title,
         string calldata _contentData
     ) external {
         require(contents[_contentId].creatorWalletAddress == address(0), "Content already registered");
@@ -51,12 +68,14 @@ contract ContentRegistry {
             creatorWalletAddress: msg.sender,
             ratePerUnit: _ratePerUnit,
             maxUnits: _maxUnits,
-            contentData: _contentData
+            title: _title,
+            contentData: _contentData,
+            timestamp: block.timestamp
         });
 
         contentIds.push(_contentId); // Store the contentId in the array
 
-        emit ContentRegistered(_contentId, msg.sender, _ratePerUnit, _maxUnits, _contentData);
+        emit ContentRegistered(_contentId, msg.sender, _ratePerUnit, _maxUnits, _title, _contentData, block.timestamp);
     }
 
     /// @notice Returns all registered content IDs
@@ -65,9 +84,10 @@ contract ContentRegistry {
     }
 
     /// @notice Returns the content data for a given content ID
-    function getContentData(uint256 _contentId) external view returns (string memory) {
+    function getContentData(uint256 _contentId) external view returns (string memory, string memory, uint256) {
         require(contents[_contentId].creatorWalletAddress != address(0), "Content not found");
-        return contents[_contentId].contentData;
+        Content memory content = contents[_contentId];
+        return (content.title, content.contentData, content.timestamp);
     }
 
     /// @notice Deposit funds into escrow for later consumption
